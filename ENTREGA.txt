@@ -3,12 +3,12 @@ ENTREGA · Voting App "Santa Cruz" — Aplicación multicontenedor
 ==============================================================================
 
 EQUIPO (integrantes):
-  1. [Laura Sofia Carvajal Peña 2220241037]
-  2. [NOMBRE COMPLETO DEL INTEGRANTE 2]
-  3. [NOMBRE COMPLETO DEL INTEGRANTE 3]
-  4. [NOMBRE COMPLETO DEL INTEGRANTE 4]
+  1. [Juan Esteban Aponte Ruiz 2220241096]
+  2. [Laura Sofia Carvajal Peña 2220241037]
+  3. [Cristian Camilo Donoso Parra 2220241117]
+  4. [Alejandro Sanchez Quimbayo ]
 
-(asignaturas: [Infraestructura y seguridad computacional] · [Carlos Andrés Díaz Santacruz] · [Universidad de Ibagué ] · [25-10-2026])
+(asignatura: [Infraestructura y seguridad computacional] · [Carlos Andrés Díaz Santacruz] · [Universidad de Ibagué ] · [25-10-2026])
 
 
 ==============================================================================
@@ -20,16 +20,12 @@ GitHub (código fuente completo):
 
 Docker Hub (imágenes publicadas):
   https://hub.docker.com/u/[TU-USUARIO-DOCKERHUB]
-  https://hub.docker.com/r/[TU-USUARIO-DOCKERHUB]/voting-app-vote
+  https://app.docker.com/accounts/laurasofia0]/voting-app-vote
   https://hub.docker.com/r/[TU-USUARIO-DOCKERHUB]/voting-app-result
   https://hub.docker.com/r/[TU-USUARIO-DOCKERHUB]/voting-app-worker
 
 Video MP4 (explicación paso a paso del .yml y de la publicación):
   [PEGAR AQUÍ EL ENLACE AL VIDEO, o adjuntarlo junto a este archivo]
-
-NOTA: reemplazá los corchetes [...] por los datos reales antes de subir.
-      Cada integrante del grupo sube una copia de ESTE MISMO archivo.
-
 
 ==============================================================================
 2. DOCKER-COMPOSE.YML  (archivo completo)
