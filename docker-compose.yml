@@ -1,0 +1,233 @@
+# =============================================================================
+#  VOTING APP "SANTA CRUZ"  ·  Aplicación multicontenedor con Docker Compose
+# =============================================================================
+#  Base : ejemplo oficial de Docker "example-voting-app" (dockersamples)
+#  Adaptado por el equipo para la entrega: Python + Node.js + Redis +
+#  PostgreSQL + un worker que procesa los resultados.
+#
+#  Criterios de la rúbrica cubiertos por este archivo:
+#    1. Archivo .yml bien definido (Compose Spec, sin `version:` obsoleto).
+#    2. 5 servicios declarados (mínimo exigido: 3).
+#    3. Enlaces entre servicios con `depends_on` + `links` (vote, result,
+#       worker enlazados con redis y db).
+#    4. Volúmenes en 5 servicios (db-data, redis-data, logs de vote/result/
+#       worker) + bind mounts de los scripts de healthcheck.
+#    5. Puertos publicados: http://localhost:8080 (votar) y
+#       http://localhost:8081 (resultados).
+#    6. Dos redes: front-tier (expuesto) y back-tier (interno).
+#    7. Imágenes publicadas en Docker Hub con el usuario del equipo
+#       (${DOCKERHUB_USER}); en GitHub está el código completo.
+#    8. Video MP4 con el paso a paso (guion en GUION_VIDEO.md).
+#
+#  Uso:
+#    docker compose up -d --build     # construye y levanta todo
+#    docker compose ps                 # ver estado y puertos
+#    docker compose down -v            # parar y borrar volúmenes
+# =============================================================================
+
+name: santacruz-voting-app
+
+services:
+
+  # ---------------------------------------------------------------------------
+  # 1) VOTE · Web en PYTHON (Flask + gunicorn) — recibe los votos.
+  #    Publica el puerto 8080 -> http://localhost:8080
+  # ---------------------------------------------------------------------------
+  vote:
+    build:
+      context: ./vote
+      dockerfile: Dockerfile
+      target: final
+    image: "${DOCKERHUB_USER:-santacruz}/voting-app-vote:latest"
+    container_name: santacruz-vote
+    depends_on:
+      redis:
+        condition: service_healthy
+      db:
+        condition: service_healthy
+    links:
+      - redis
+      - db
+    environment:
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      OPTION_A: "${OPTION_A:-Café}"
+      OPTION_B: "${OPTION_B:-Té}"
+      LOG_DIR: /var/log/app
+    ports:
+      - "8080:80"
+    volumes:
+      - "vote-logs:/var/log/app"
+    networks:
+      - front-tier
+      - back-tier
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost/healthz"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+
+  # ---------------------------------------------------------------------------
+  # 2) RESULT · Web en NODE.JS (Express + socket.io) — muestra los resultados
+  #    en tiempo real leyéndolos de PostgreSQL.
+  #    Publica el puerto 8081 -> http://localhost:8081
+  # ---------------------------------------------------------------------------
+  result:
+    build:
+      context: ./result
+      dockerfile: Dockerfile
+    image: "${DOCKERHUB_USER:-santacruz}/voting-app-result:latest"
+    container_name: santacruz-result
+    depends_on:
+      db:
+        condition: service_healthy
+    links:
+      - db
+    environment:
+      DB_HOST: db
+      DB_PORT: "5432"
+      DB_USER: postgres
+      DB_PASSWORD: postgres
+      DB_NAME: postgres
+      OPTION_A: "${OPTION_A:-Café}"
+      OPTION_B: "${OPTION_B:-Té}"
+      PORT: "80"
+      LOG_DIR: /var/log/app
+    ports:
+      - "8081:80"
+    volumes:
+      - "result-logs:/var/log/app"
+    networks:
+      - front-tier
+      - back-tier
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost/healthz"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+
+  # ---------------------------------------------------------------------------
+  # 3) WORKER · Contenedor que PROCESA los resultados (Python).
+  #    Saca los votos de la cola de Redis y los guarda en PostgreSQL.
+  #    No publica puertos: trabaja en segundo plano.
+  # ---------------------------------------------------------------------------
+  worker:
+    build:
+      context: ./worker
+      dockerfile: Dockerfile
+    image: "${DOCKERHUB_USER:-santacruz}/voting-app-worker:latest"
+    container_name: santacruz-worker
+    depends_on:
+      redis:
+        condition: service_healthy
+      db:
+        condition: service_healthy
+    links:
+      - redis
+      - db
+    environment:
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      DB_HOST: db
+      DB_PORT: "5432"
+      DB_USER: postgres
+      DB_PASSWORD: postgres
+      DB_NAME: postgres
+      QUEUE_NAME: votes
+      LOG_DIR: /app/logs
+    volumes:
+      - "worker-logs:/app/logs"
+    networks:
+      - back-tier
+    healthcheck:
+      # El worker no expone puertos: nos fijamos en que su log esté vivo.
+      test: ["CMD-SHELL", "test -s /app/logs/worker.log || exit 1"]
+      interval: 15s
+      timeout: 3s
+      retries: 3
+      start_period: 15s
+    restart: unless-stopped
+
+  # ---------------------------------------------------------------------------
+  # 4) REDIS · Cola de votos (almacenamiento en memoria con persistencia AOF).
+  #    Solo es accesible desde la red interna back-tier.
+  # ---------------------------------------------------------------------------
+  redis:
+    image: redis:7-alpine
+    container_name: santacruz-redis
+    command: ["redis-server", "--appendonly", "yes"]
+    expose:
+      - "6379"
+    volumes:
+      - "redis-data:/data"
+      - "./healthchecks:/healthchecks:ro"
+    healthcheck:
+      # Se invoca con "sh" a propósito: en bind mounts de Windows el bit de
+      # ejecución no se conserva y el script se negaría a arrancar solo.
+      test: ["CMD-SHELL", "sh /healthchecks/redis.sh || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+    networks:
+      - back-tier
+    restart: unless-stopped
+
+  # ---------------------------------------------------------------------------
+  # 5) DB · PostgreSQL, almacén permanente de los votos procesados.
+  #    Los datos sobreviven a `docker compose down` gracias al volumen.
+  # ---------------------------------------------------------------------------
+  db:
+    image: postgres:16-alpine
+    container_name: santacruz-db
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: postgres
+    expose:
+      - "5432"
+    volumes:
+      - "db-data:/var/lib/postgresql/data"
+      - "./db/init.sql:/docker-entrypoint-initdb.d/init.sql:ro"
+      - "./healthchecks:/healthchecks:ro"
+    healthcheck:
+      # Igual que en Redis: se invoca con "sh" para que funcione también
+      # cuando el proyecto está en un disco de Windows.
+      test: ["CMD-SHELL", "sh /healthchecks/postgres.sh || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+    networks:
+      - back-tier
+    restart: unless-stopped
+
+# =============================================================================
+#  VOLÚMENES  (criterio 4) — datos persistentes y logs de los servicios
+# =============================================================================
+volumes:
+  db-data:
+    name: santacruz-db-data
+  redis-data:
+    name: santacruz-redis-data
+  vote-logs:
+    name: santacruz-vote-logs
+  result-logs:
+    name: santacruz-result-logs
+  worker-logs:
+    name: santacruz-worker-logs
+
+# =============================================================================
+#  REDES  (criterio 6) — separación entre la parte pública y la interna
+# =============================================================================
+networks:
+  front-tier:
+    name: santacruz-front-tier
+    driver: bridge
+  back-tier:
+    name: santacruz-back-tier
+    driver: bridge

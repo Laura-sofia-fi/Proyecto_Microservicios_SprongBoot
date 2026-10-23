@@ -1,0 +1,34 @@
+# =============================================================================
+#  OVERRIDE DE DESARROLLO  (se usa junto al docker-compose.yml principal)
+# =============================================================================
+#  Monta el código fuente en caliente dentro de los contenedores para
+#  developing sin reconstruir la imagen:
+#
+#    docker compose -f docker-compose.yml -f docker-compose.dev.yml up
+#
+#  - vote   -> Flask en modo desarrollo (recarga automática)
+#  - result -> nodemon con depurador en 9229
+# =============================================================================
+
+services:
+
+  vote:
+    build:
+      target: dev
+    volumes:
+      - "./vote:/usr/local/app"
+    environment:
+      FLASK_ENV: development
+    command: ["python", "app.py"]
+
+  result:
+    entrypoint: ["nodemon", "--inspect=0.0.0.0", "server.js"]
+    volumes:
+      - "./result:/usr/local/app"
+    ports:
+      - "127.0.0.1:9229:9229"
+
+  worker:
+    volumes:
+      - "./worker:/app"
+    command: ["python", "worker.py"]

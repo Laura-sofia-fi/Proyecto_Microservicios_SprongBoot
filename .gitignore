@@ -1,0 +1,23 @@
+# Dependencias de Node
+node_modules/
+npm-debug.log*
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Logs y datos locales
+*.log
+logs/
+
+# Sistema operativo / editores
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Claves y credenciales (no se suben nunca)
+*.key
+*.pem

@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8">
+    <title>Resultados en vivo</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="keywords" content="docker-compose, docker, voting app, nodejs">
+    <meta name="author" content="Equipo Santa Cruz">
+    <link rel="stylesheet" href="/stylesheets/style.css">
+  </head>
+  <body>
+    <div id="content-container">
+      <div id="content-container-center">
+        <h3 id="title">Resultados en vivo</h3>
+
+        <div id="choice">
+          <div class="choice a">
+            <div class="label" id="label-a">Café</div>
+            <div class="stat" id="stat-a">0%</div>
+            <div class="votes" id="votes-a">0 votos</div>
+          </div>
+
+          <div class="divider"></div>
+
+          <div class="choice b">
+            <div class="label" id="label-b">Té</div>
+            <div class="stat" id="stat-b">0%</div>
+            <div class="votes" id="votes-b">0 votos</div>
+          </div>
+        </div>
+
+        <div id="result"><span id="total">Todavía no hay votos</span></div>
+        <div id="connection">Conectando…</div>
+        <div id="source">Datos leídos de PostgreSQL por el contenedor <b>result</b> (Node.js)</div>
+      </div>
+    </div>
+
+    <!-- Cliente de socket.io servido por el propio servidor -->
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="/app.js"></script>
+  </body>
+</html>

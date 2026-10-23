@@ -1,0 +1,181 @@
+# =============================================================================
+#  VARIANTE "SOLO IMÁGENES PUBLICADAS"  (criterio 7)
+# =============================================================================
+#  Este archivo NO construye nada localmente: descarga de Docker Hub las
+#  imágenes que el equipo publicó. Sirve para DEMOSTRAR en el video que la
+#  aplicación está realmente publicada en el registro.
+#
+#  Uso:
+#    docker compose -f docker-compose.images.yml up -d
+#
+#  Requisito: haber hecho `docker login` con una cuenta de Docker Hub.
+# =============================================================================
+
+name: santacruz-voting-app
+
+services:
+
+  vote:
+    image: "${DOCKERHUB_USER:-santacruz}/voting-app-vote:latest"
+    container_name: santacruz-vote
+    depends_on:
+      redis:
+        condition: service_healthy
+      db:
+        condition: service_healthy
+    links:
+      - redis
+      - db
+    environment:
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      OPTION_A: "${OPTION_A:-Café}"
+      OPTION_B: "${OPTION_B:-Té}"
+      LOG_DIR: /var/log/app
+    ports:
+      - "8080:80"
+    volumes:
+      - "vote-logs:/var/log/app"
+    networks:
+      - front-tier
+      - back-tier
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost/healthz"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+
+  result:
+    image: "${DOCKERHUB_USER:-santacruz}/voting-app-result:latest"
+    container_name: santacruz-result
+    depends_on:
+      db:
+        condition: service_healthy
+    links:
+      - db
+    environment:
+      DB_HOST: db
+      DB_PORT: "5432"
+      DB_USER: postgres
+      DB_PASSWORD: postgres
+      DB_NAME: postgres
+      OPTION_A: "${OPTION_A:-Café}"
+      OPTION_B: "${OPTION_B:-Té}"
+      PORT: "80"
+      LOG_DIR: /var/log/app
+    ports:
+      - "8081:80"
+    volumes:
+      - "result-logs:/var/log/app"
+    networks:
+      - front-tier
+      - back-tier
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost/healthz"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+
+  worker:
+    image: "${DOCKERHUB_USER:-santacruz}/voting-app-worker:latest"
+    container_name: santacruz-worker
+    depends_on:
+      redis:
+        condition: service_healthy
+      db:
+        condition: service_healthy
+    links:
+      - redis
+      - db
+    environment:
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      DB_HOST: db
+      DB_PORT: "5432"
+      DB_USER: postgres
+      DB_PASSWORD: postgres
+      DB_NAME: postgres
+      QUEUE_NAME: votes
+      LOG_DIR: /app/logs
+    volumes:
+      - "worker-logs:/app/logs"
+    networks:
+      - back-tier
+    healthcheck:
+      # El worker no expone puertos: nos fijamos en que su log esté vivo.
+      test: ["CMD-SHELL", "test -s /app/logs/worker.log || exit 1"]
+      interval: 15s
+      timeout: 3s
+      retries: 3
+      start_period: 15s
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    container_name: santacruz-redis
+    command: ["redis-server", "--appendonly", "yes"]
+    expose:
+      - "6379"
+    volumes:
+      - "redis-data:/data"
+      - "./healthchecks:/healthchecks:ro"
+    healthcheck:
+      # Se invoca con "sh" a propósito: en bind mounts de Windows el bit de
+      # ejecución no se conserva y el script se negaría a arrancar solo.
+      test: ["CMD-SHELL", "sh /healthchecks/redis.sh || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+    networks:
+      - back-tier
+    restart: unless-stopped
+
+  db:
+    image: postgres:16-alpine
+    container_name: santacruz-db
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: postgres
+    expose:
+      - "5432"
+    volumes:
+      - "db-data:/var/lib/postgresql/data"
+      - "./db/init.sql:/docker-entrypoint-initdb.d/init.sql:ro"
+      - "./healthchecks:/healthchecks:ro"
+    healthcheck:
+      # Igual que en Redis: se invoca con "sh" para que funcione también
+      # cuando el proyecto está en un disco de Windows.
+      test: ["CMD-SHELL", "sh /healthchecks/postgres.sh || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+    networks:
+      - back-tier
+    restart: unless-stopped
+
+volumes:
+  db-data:
+    name: santacruz-db-data
+  redis-data:
+    name: santacruz-redis-data
+  vote-logs:
+    name: santacruz-vote-logs
+  result-logs:
+    name: santacruz-result-logs
+  worker-logs:
+    name: santacruz-worker-logs
+
+networks:
+  front-tier:
+    name: santacruz-front-tier
+    driver: bridge
+  back-tier:
+    name: santacruz-back-tier
+    driver: bridge
